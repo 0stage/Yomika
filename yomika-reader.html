@@ -133,12 +133,15 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:0;border-radiu
 <div id="parseMarkers" aria-hidden="true"></div><div id="deckBackdrop" hidden></div><div id="sheet" class="glass"></div><div id="vocabMenu" class="glass" role="menu" hidden></div><div id="drop" hidden>Suelta aquí un EPUB o un diccionario JMdict</div>
 <input type="file" id="f" accept=".epub,.zip,.json,.tgz,.gz" hidden>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.8/dist/umd/supabase.js" integrity="sha384-b4JKVkST7Jkb2qRVyZEamH2WA+trxThEkVN6z3JXWfUDFNZd14MnE/qRvt/zy2J5" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" integrity="sha384-AQ3POAMqIhwS81FrUH95ekxqBZHeP5tG2JfEL3+7GuTtfRLWnrRh32UxwzM+//A9" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" integrity="sha384-TnlRYaR4JYz/lpaGuaiU61PjNberSA4vjLjtF+oRC/IkohkJqnWxw5EmDSOt1vA1" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" integrity="sha384-qn4Jh88HhJA8dplNQyGjOh9OGI4izVhrfj/qIFgaKcdgOE06pXqIKGlsCILZcLAC" crossorigin="anonymous"></script>
 <script>
 const $=i=>document.getElementById(i),G=40,view=$('view'),c=$('c'),sl=$('sl'),sheet=$('sheet');
-const SUPABASE_URL='',SUPABASE_PUBLISHABLE_KEY='';let sb=null,cloudUser=null;
-if(SUPABASE_URL&&SUPABASE_PUBLISHABLE_KEY&&window.supabase?.createClient)sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
-if(sb)sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT'&&cloudUser){showEntry();toast('Sesión cerrada')}});
+const FIREBASE_CONFIG={apiKey:'',authDomain:'',projectId:'',appId:''};let fb=null,cloudUser=null;
+if(FIREBASE_CONFIG.apiKey&&FIREBASE_CONFIG.projectId&&window.firebase?.initializeApp){try{firebase.apps.length||firebase.initializeApp(FIREBASE_CONFIG);fb={auth:firebase.auth(),db:firebase.firestore()}}catch(e){console.warn('No se pudo iniciar Firebase',e)}}
+const toCloudUser=u=>u?{id:u.uid,email:u.email||''}:null;
+if(fb)fb.auth.onAuthStateChanged(u=>{if(!u&&cloudUser){showEntry();toast('Sesión cerrada')}});
 const booksStoreKey=()=>cloudUser?'books:'+cloudUser.id:'books';
 const deckStoreKey=()=>cloudUser?'kotoba:decks:'+cloudUser.id:'kotoba:decks';
 const lastDeckStoreKey=()=>cloudUser?'kotoba:lastDeck:'+cloudUser.id:'kotoba:lastDeck';
@@ -332,11 +335,20 @@ $('deckExport').onclick=()=>{const a=document.createElement('a');a.href=URL.crea
 
 function showDeckRenameForm(id){const d=readDecks().find(x=>x.id===id);if(!d)return;sheet.innerHTML='<div class="deckModalScroll"><div class="surf">Editar nombre del deck</div><div class="deckForm"><label for="deckRenameInput">Nombre del deck</label><input id="deckRenameInput" maxlength="48" autocomplete="off"><div class="deckFormActions"><button class="pill" id="saveDeckRename">Guardar cambios</button><button class="b" id="cancelDeckRename">Cancelar</button></div></div></div>';sheet.classList.remove('editing');sheet.classList.add('centered','deckDetail','open');sheet.setAttribute('aria-label','Editar nombre del deck');$('deckBackdrop').hidden=false;const input=$('deckRenameInput');input.value=d.name;$('cancelDeckRename').onclick=()=>showDeck(id);$('saveDeckRename').onclick=()=>{const clean=input.value.trim(),decks=readDecks(),target=decks.find(x=>x.id===id);if(!clean){toast('Escribe un nombre para el deck');input.focus();return}if(isReservedVocabDeckName(clean)){toast('Ese nombre está reservado para las categorías de Parsear');input.focus();return}if(decks.some(x=>x.id!==id&&x.name.toLocaleLowerCase()===clean.toLocaleLowerCase())){toast('Ya existe un deck con ese nombre');input.focus();return}if(!target){closeSheet();return}target.name=clean;target.updatedAt=Date.now();writeDecks(decks);if(cloudUser)syncDecksToCloud().catch(e=>toast('No se pudo sincronizar el deck: '+e.message));showDeck(id);toast('Nombre del deck actualizado')};input.addEventListener('keydown',e=>{if(e.key==='Enter')$('saveDeckRename').click()});setTimeout(()=>{input.focus();input.select()},80)}
 function showDeleteDeckConfirm(id){const d=readDecks().find(x=>x.id===id);if(!d)return;sheet.innerHTML='<div class="deckModalScroll"><div class="surf">Eliminar deck</div><p>¿Seguro que quieres eliminar «'+esc(d.name)+'»?</p><p class="rd">Se eliminarán también las palabras que contiene. Esta acción no se puede deshacer.</p><div class="deckFormActions"><button class="b deckDeleteAction" id="confirmDeleteDeck">Eliminar deck</button><button class="b" id="cancelDeleteDeck">Cancelar</button></div></div>';sheet.classList.remove('editing');sheet.classList.add('centered','deckDetail','open');sheet.setAttribute('aria-label','Confirmar eliminación del deck');$('deckBackdrop').hidden=false;$('cancelDeleteDeck').onclick=()=>showDeck(id);$('confirmDeleteDeck').onclick=()=>deleteDeckRecord(id)}
-async function deleteDeckRecord(id){const button=$('confirmDeleteDeck'),user=cloudUser;if(button){button.disabled=true;button.textContent='Eliminando…'}try{if(user&&sb){const result=await sb.from('kotoba_decks').delete().eq('user_id',user.id).eq('deck_id',id);if(result.error)throw result.error}const decks=readDecks(),remaining=decks.filter(d=>d.id!==id);writeDecks(remaining);if(ls.get(lastDeckStoreKey())===id)ls.set(lastDeckStoreKey(),remaining[0]?.id||'');closeSheet();toast('Deck eliminado')}catch(e){if(button){button.disabled=false;button.textContent='Eliminar deck'}toast('No se pudo eliminar el deck: '+e.message)}}
+async function deleteDeckRecord(id){const button=$('confirmDeleteDeck'),user=cloudUser;if(button){button.disabled=true;button.textContent='Eliminando…'}try{if(user&&fb)await cloudStore.deleteDeck(id);const decks=readDecks(),remaining=decks.filter(d=>d.id!==id);writeDecks(remaining);if(ls.get(lastDeckStoreKey())===id)ls.set(lastDeckStoreKey(),remaining[0]?.id||'');closeSheet();toast('Deck eliminado')}catch(e){if(button){button.disabled=false;button.textContent='Eliminar deck'}toast('No se pudo eliminar el deck: '+e.message)}}
 function chooseDeckForWord(item){const decks=readDecks().filter(d=>!isVocabSystemDeck(d.name));if(!decks.length){showDeckForm(item,true);return}let h='<div class="surf">Mover a otro deck</div><p class="rd">Elige el deck de destino para esta palabra.</p><div class="deckList">';h+=decks.map(d=>`<button class="deckListItem" data-move-deck="${esc(d.id)}"><span>${esc(d.name)}</span><span>${d.words.length} ${d.words.length===1?'palabra':'palabras'}</span></button>`).join('');h+='</div><button class="b" id="newDeckForWord">+ Crear un deck nuevo</button>';sheet.innerHTML=h;sheet.classList.add('open');sheet.querySelectorAll('[data-move-deck]').forEach(b=>b.onclick=()=>{addWordToDeck(item,b.dataset.moveDeck,true);closeSheet()});$('newDeckForWord').onclick=()=>showDeckForm(item,true)}
 function openCurrentDeck(){const decks=readDecks(),current=decks.find(d=>d.id===ls.get(lastDeckStoreKey()))||decks[0];if(current)showDeck(current.id);else showDeckForm()}$('homeNewDeck').onclick=()=>showDeckForm();$('deckBtn').onclick=openCurrentDeck;$('vocabReviewRow').onclick=()=>openVocabDeck('review');$('vocabMasteredRow').onclick=()=>openVocabDeck('mastered');$('parseBtn').onclick=toggleParseMode;
-function showAuthNotice(kind){const title=kind==='register'?'Crear cuenta':'Iniciar sesión',missing=!SUPABASE_URL||!SUPABASE_PUBLISHABLE_KEY;let message=missing?'La cuenta online necesita la URL del proyecto Supabase y su clave Publishable.':'La librería de Supabase no está disponible o la app debe abrirse desde una dirección web (http/https), no desde un archivo local.';sheet.innerHTML=`<div class="surf">${title}</div><p>${message}</p><p>El modo invitado funciona en este navegador. Al conectar la cuenta, Yomika sincroniza el progreso de lectura y los decks. Los EPUB permanecen en este dispositivo.</p><button class="b" id="authNoticeClose">Entendido</button>`;sheet.classList.add('open');$('authNoticeClose').onclick=closeSheet}
-function showAuthFlow(kind){if(!sb||location.protocol==='file:'){showAuthNotice(kind);return}const registering=kind==='register',title=registering?'Crear cuenta':'Iniciar sesión';sheet.innerHTML=`<div class="surf">${title}</div><form class="authForm" id="authForm"><label for="authEmail">Correo electrónico</label><input id="authEmail" name="email" type="email" autocomplete="email" required><label for="authPassword">Contraseña</label><input id="authPassword" name="password" type="password" minlength="8" autocomplete="${registering?'new-password':'current-password'}" required>${registering?'<label for="authPassword2">Repite la contraseña</label><input id="authPassword2" type="password" minlength="8" autocomplete="new-password" required>':''}<p id="authError" class="authError" hidden></p><div class="authFormActions"><button class="pill" id="authSubmit" type="submit">${registering?'Crear cuenta':'Entrar'}</button><button class="b" id="authCancel" type="button">Cancelar</button></div></form>`;sheet.classList.add('open');$('authCancel').onclick=closeSheet;$('authForm').onsubmit=async e=>{e.preventDefault();const email=$('authEmail').value.trim(),password=$('authPassword').value,button=$('authSubmit'),err=$('authError');if(registering&&password!==$('authPassword2').value){err.textContent='Las contraseñas no coinciden.';err.hidden=false;return}button.disabled=true;button.textContent='Conectando…';err.hidden=true;try{let result;if(registering)result=await sb.auth.signUp({email,password,options:{emailRedirectTo:location.href.split('#')[0]}});else result=await sb.auth.signInWithPassword({email,password});if(result.error)throw result.error;if(registering&&!result.data.session){sheet.innerHTML='<div class="surf">Revisa tu correo</div><p>Supabase ha enviado un enlace de confirmación. Ábrelo desde la dirección web donde usarás Yomika.</p><button class="b" id="authNoticeClose">Entendido</button>';sheet.classList.add('open');$('authNoticeClose').onclick=closeSheet;return}const user=result.data.user||result.data.session?.user;if(user)await activateAccount(user)}catch(err){$('authError').textContent=err.message||'No se pudo conectar con Supabase.';$('authError').hidden=false;button.disabled=false;button.textContent=registering?'Crear cuenta':'Entrar'}}}
+const authErrorText=e=>{const m={'auth/invalid-credential':'Correo o contraseña incorrectos.','auth/wrong-password':'Correo o contraseña incorrectos.','auth/user-not-found':'Correo o contraseña incorrectos.','auth/invalid-email':'El correo no es válido.','auth/email-already-in-use':'Ya existe una cuenta con ese correo.','auth/weak-password':'La contraseña es demasiado débil.','auth/too-many-requests':'Demasiados intentos. Espera un momento y vuelve a probar.','auth/network-request-failed':'Sin conexión con el servicio de cuentas.'};return m[e?.code]||e?.message||'No se pudo conectar con el servicio de cuentas.'};
+function showAuthNotice(kind){const title=kind==='register'?'Crear cuenta':'Iniciar sesión',missing=!FIREBASE_CONFIG.apiKey||!FIREBASE_CONFIG.projectId;let message=missing?'La cuenta online necesita la configuración del proyecto Firebase.':'La librería de Firebase no está disponible o la app debe abrirse desde una dirección web (http/https), no desde un archivo local.';sheet.innerHTML=`<div class="surf">${title}</div><p>${message}</p><p>El modo invitado funciona en este navegador. Al conectar la cuenta, Yomika sincroniza el progreso de lectura y los decks. Los EPUB permanecen en este dispositivo.</p><button class="b" id="authNoticeClose">Entendido</button>`;sheet.classList.add('open');$('authNoticeClose').onclick=closeSheet}
+function showAuthFlow(kind){if(!fb||location.protocol==='file:'){showAuthNotice(kind);return}const registering=kind==='register',title=registering?'Crear cuenta':'Iniciar sesión',back=location.href.split('#')[0];sheet.innerHTML=`<div class="surf">${title}</div><form class="authForm" id="authForm"><label for="authEmail">Correo electrónico</label><input id="authEmail" name="email" type="email" autocomplete="email" required><label for="authPassword">Contraseña</label><input id="authPassword" name="password" type="password" minlength="8" autocomplete="${registering?'new-password':'current-password'}" required>${registering?'<label for="authPassword2">Repite la contraseña</label><input id="authPassword2" type="password" minlength="8" autocomplete="new-password" required>':''}<p id="authError" class="authError" hidden></p><p id="authInfo" class="rd" hidden></p><div class="authFormActions"><button class="pill" id="authSubmit" type="submit">${registering?'Crear cuenta':'Entrar'}</button>${registering?'':'<button class="b" id="authReset" type="button">¿Olvidaste tu contraseña?</button>'}<button class="b" id="authCancel" type="button">Cancelar</button></div></form>`;sheet.classList.add('open');$('authCancel').onclick=closeSheet;
+ if($('authReset'))$('authReset').onclick=async()=>{const email=$('authEmail').value.trim(),err=$('authError'),info=$('authInfo');if(!email){err.textContent='Escribe tu correo primero.';err.hidden=false;return}try{await fb.auth.sendPasswordResetEmail(email,{url:back});err.hidden=true;info.textContent='Si existe una cuenta con ese correo, recibirás un enlace para restablecer la contraseña.';info.hidden=false}catch(error){err.textContent=authErrorText(error);err.hidden=false}};
+ $('authForm').onsubmit=async e=>{e.preventDefault();const email=$('authEmail').value.trim(),password=$('authPassword').value,button=$('authSubmit'),err=$('authError');if(registering&&password!==$('authPassword2').value){err.textContent='Las contraseñas no coinciden.';err.hidden=false;return}button.disabled=true;button.textContent='Conectando…';err.hidden=true;
+  try{
+   if(registering){const cred=await fb.auth.createUserWithEmailAndPassword(email,password);try{await cred.user.sendEmailVerification({url:back})}catch{}await fb.auth.signOut();sheet.innerHTML='<div class="surf">Revisa tu correo</div><p>Te hemos enviado un enlace para confirmar tu cuenta. Ábrelo y después inicia sesión.</p><button class="b" id="authNoticeClose">Entendido</button>';sheet.classList.add('open');$('authNoticeClose').onclick=closeSheet;return}
+   const cred=await fb.auth.signInWithEmailAndPassword(email,password);await cred.user.reload();
+   if(!cred.user.emailVerified){try{await cred.user.sendEmailVerification({url:back})}catch{}await fb.auth.signOut();throw new Error('Confirma tu correo antes de entrar. Te hemos enviado el enlace de nuevo.')}
+   await activateAccount(toCloudUser(cred.user))
+  }catch(error){err.textContent=authErrorText(error);err.hidden=false;button.disabled=false;button.textContent=registering?'Crear cuenta':'Entrar'}}}
 async function privateProgressId(book){
  if(book.cloudProgressId)return book.cloudProgressId;
  if(!book.blob?.arrayBuffer||!globalThis.crypto?.subtle)throw new Error('No se pudo crear el identificador privado del libro en este navegador.');
@@ -344,19 +356,12 @@ async function privateProgressId(book){
  book.cloudProgressId='sha256:'+hex;
  return book.cloudProgressId
 }
+const progressDocId=bookId=>String(bookId).replace(/^sha256:/,'');
 async function syncBookProgressWithCloud(book){
- if(!sb||!cloudUser||!book?.blob)return book;
- const userId=cloudUser.id,bookId=await privateProgressId(book),remoteResult=await sb.from('kotoba_reading_progress').select('progress,updated_at').eq('user_id',userId).eq('book_id',bookId).maybeSingle();
- if(remoteResult.error)throw remoteResult.error;
- let remote=remoteResult.data,legacyProgress=false;
- if(!remote){const legacy=await sb.from('kotoba_books').select('progress,updated_at').eq('user_id',userId).eq('book_id',book.id).maybeSingle();if(!legacy.error&&legacy.data){remote=legacy.data;legacyProgress=true}}
- const localTime=Number(book.progressUpdated||0),remoteTime=Date.parse(remote?.updated_at||'')||0;
+ if(!fb||!cloudUser||!book?.blob)return book;
+ const bookId=await privateProgressId(book),docId=progressDocId(bookId),remote=await cloudStore.getProgress(docId),localTime=Number(book.progressUpdated||0),remoteTime=Number(remote?.updatedAt||0);
  if(remote&&remoteTime>localTime){book.progress=remote.progress||book.progress;book.progressUpdated=remoteTime}
- if(!remoteResult.data||legacyProgress||localTime>=remoteTime){
-  const updatedAt=new Date(Math.max(Date.now(),Number(book.progressUpdated||0))).toISOString(),saved=await sb.from('kotoba_reading_progress').upsert({user_id:userId,book_id:bookId,progress:book.progress||{ch:0,fr:0,v:0},updated_at:updatedAt},{onConflict:'user_id,book_id'});
-  if(saved.error)throw saved.error;
-  book.progressUpdated=Date.parse(updatedAt)
- }
+ if(!remote||localTime>remoteTime){const updatedAt=localTime||Date.now();await cloudStore.putProgress(docId,book.progress||{ch:0,fr:0,v:0},updatedAt);book.progressUpdated=updatedAt}
  return{...book,cloudProgressId:bookId}
 }
 async function mergeLocalBooksForAccount(guestBooks=[]){
@@ -365,34 +370,42 @@ async function mergeLocalBooksForAccount(guestBooks=[]){
  await idb('put',key,[...byId.values()].sort((a,b)=>(b.opened||b.added||0)-(a.opened||a.added||0)))
 }
 async function syncProgressToCloud(){
- if(!sb||!cloudUser)return;
+ if(!fb||!cloudUser)return;
  const key=booksStoreKey(),books=await idb('get',key)||[],updated=[];
  for(const book of books)updated.push(book.blob?await syncBookProgressWithCloud(book):book);
  await idb('put',key,updated)
-}const asISO=v=>{const t=typeof v==='number'?v:Date.parse(v);return new Date(Number.isFinite(t)&&t>0?t:Date.now()).toISOString()};
+}const CLOUD_CHUNK=400,cloudClean=v=>JSON.parse(JSON.stringify(v));
+const cloudHash=t=>{let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36)+'.'+t.length.toString(36)};
+const cloudUserDoc=()=>fb.db.collection('users').doc(cloudUser.id);
+async function cloudCommit(ops){for(let i=0;i<ops.length;i+=400){const b=fb.db.batch();ops.slice(i,i+400).forEach(op=>op(b));await b.commit()}}
+const cloudStore={
+ async listDecks(){const snap=await cloudUserDoc().collection('decks').get();return snap.docs.map(d=>({id:d.id,...d.data()}))},
+ async getWords(meta){const col=cloudUserDoc().collection('decks').doc(meta.id).collection('chunks'),parts=await Promise.all(Array.from({length:meta.chunkCount||0},(_,i)=>col.doc(String(i)).get()));return parts.flatMap(x=>x.exists?x.data().words||[]:[])},
+ async putDeck(deck,prev){const ref=cloudUserDoc().collection('decks').doc(deck.id),words=cloudClean(deck.words),chunks=[];for(let i=0;i<words.length;i+=CLOUD_CHUNK)chunks.push(words.slice(i,i+CLOUD_CHUNK));const hashes=chunks.map(c=>cloudHash(JSON.stringify(c))),old=prev?.hashes||[],ops=[];chunks.forEach((c,i)=>{if(old[i]!==hashes[i])ops.push(b=>b.set(ref.collection('chunks').doc(String(i)),{words:c}))});for(let i=chunks.length;i<(prev?.chunkCount||0);i++)ops.push(b=>b.delete(ref.collection('chunks').doc(String(i))));await cloudCommit(ops);await ref.set({name:deck.name,created:deck.created||'',updatedAt:deck.updatedAt,chunkCount:chunks.length,wordCount:words.length,hashes})},
+ async deleteDeck(id){const ref=cloudUserDoc().collection('decks').doc(id),snap=await ref.get(),n=snap.exists?snap.data().chunkCount||0:0,ops=[];for(let i=0;i<n;i++)ops.push(b=>b.delete(ref.collection('chunks').doc(String(i))));await cloudCommit(ops);await ref.delete()},
+ async getProgress(id){const x=await cloudUserDoc().collection('progress').doc(id).get();return x.exists?x.data():null},
+ async putProgress(id,progress,updatedAt){await cloudUserDoc().collection('progress').doc(id).set({progress:cloudClean(progress),updatedAt})}
+};
 let deckSyncChain=Promise.resolve();
 function syncDecksToCloud(seedDecks=[]){const run=deckSyncChain.then(()=>doSyncDecks(seedDecks));deckSyncChain=run.catch(()=>{});return run}
 async function doSyncDecks(seedDecks){
- if(!sb||!cloudUser)return;
- const user=cloudUser,ts=v=>Number(v)||0,lname=n=>String(n).toLocaleLowerCase(),mergeWords=(base,incoming)=>{const m=new Map((base||[]).map(w=>[w.word,w]));for(const w of incoming||[])m.set(w.word,{...m.get(w.word),...w});return[...m.values()]};
- const metaRes=await sb.from('kotoba_decks').select('deck_id,name,created_at,updated_at');
- if(metaRes.error)throw metaRes.error;
- const meta=metaRes.data||[],metaIds=new Set(meta.map(r=>r.deck_id)),metaNames=new Set(meta.map(r=>lname(r.name)));
+ if(!fb||!cloudUser)return;
+ const ts=v=>Number(v)||0,lname=n=>String(n).toLocaleLowerCase(),mergeWords=(base,incoming)=>{const m=new Map((base||[]).map(w=>[w.word,w]));for(const w of incoming||[])m.set(w.word,{...m.get(w.word),...w});return[...m.values()]};
+ const metas=await cloudStore.listDecks(),metaIds=new Set(metas.map(r=>r.id)),metaNames=new Set(metas.map(r=>lname(r.name)));
  const all=readDecks().map(d=>({...d,words:Array.isArray(d.words)?d.words:[]})),startUpdated=new Map(all.map(d=>[d.id,ts(d.updatedAt)])),upload=new Set(),find=d=>all.find(x=>x.id===d.id)||all.find(x=>lname(x.name)===lname(d.name));
  for(const d of all)if(!d.cloud||ts(d.updatedAt)>ts(d.syncedAt))upload.add(d.id);
  for(const d of seedDecks){const t=find(d);if(t){t.words=mergeWords(t.words,d.words);t.updatedAt=Math.max(ts(t.updatedAt),ts(d.updatedAt));upload.add(t.id)}else{const n={...d,words:Array.isArray(d.words)?d.words:[]};all.push(n);upload.add(n.id)}}
- const seedMatch=r=>seedDecks.some(sd=>sd.id===r.deck_id||lname(sd.name)===lname(r.name)),need=[];
- for(const r of meta){const t=all.find(x=>x.id===r.deck_id)||all.find(x=>lname(x.name)===lname(r.name));if(!t||seedMatch(r)||(Date.parse(r.updated_at)||0)>ts(t.updatedAt))need.push(r.deck_id)}
- let rows=[];if(need.length){const res=await sb.from('kotoba_decks').select('*').in('deck_id',need);if(res.error)throw res.error;rows=res.data||[]}
- for(const row of rows){const inc={id:row.deck_id,name:row.name,words:Array.isArray(row.words)?row.words:[],created:row.created_at,updatedAt:Date.parse(row.updated_at)||0},t=find(inc);
+ const seedMatch=r=>seedDecks.some(sd=>sd.id===r.id||lname(sd.name)===lname(r.name)),need=[];
+ for(const r of metas){const t=all.find(x=>x.id===r.id)||all.find(x=>lname(x.name)===lname(r.name));if(!t||seedMatch(r)||ts(r.updatedAt)>ts(t.updatedAt))need.push(r)}
+ const rows=await Promise.all(need.map(async r=>({...r,words:await cloudStore.getWords(r)})));
+ for(const row of rows){const inc={id:row.id,name:row.name,words:Array.isArray(row.words)?row.words:[],created:row.created,updatedAt:ts(row.updatedAt)},t=find(inc);
   if(!t){all.push({...inc,cloud:true,syncedAt:inc.updatedAt});continue}
   const oldId=t.id,hadLocalChanges=upload.has(oldId);
   if(hadLocalChanges){t.words=mergeWords(inc.words,t.words);t.updatedAt=Math.max(ts(t.updatedAt),inc.updatedAt)}else{t.words=inc.words;t.updatedAt=inc.updatedAt;t.cloud=true;t.syncedAt=inc.updatedAt}
   t.name=inc.name;t.id=inc.id;t.created=t.created||inc.created;
   if(oldId!==t.id){if(ls.get(lastDeckStoreKey())===oldId)ls.set(lastDeckStoreKey(),t.id);if(upload.delete(oldId))upload.add(t.id)}}
  for(let i=all.length-1;i>=0;i--){const d=all[i];if(d.cloud&&!upload.has(d.id)&&!metaIds.has(d.id)&&!metaNames.has(lname(d.name)))all.splice(i,1)}
- const out=all.filter(d=>upload.has(d.id)).map(d=>{d.updatedAt=ts(d.updatedAt)||Date.parse(d.created)||Date.now();return{user_id:user.id,deck_id:d.id,name:canonicalVocabDeckName(d.name),words:d.words,created_at:asISO(d.created),updated_at:asISO(d.updatedAt)}});
- if(out.length){const saved=await sb.from('kotoba_decks').upsert(out,{onConflict:'user_id,deck_id'});if(saved.error)throw saved.error;for(const d of all)if(upload.has(d.id)){d.cloud=true;d.syncedAt=ts(d.updatedAt)}}
+ for(const d of all.filter(x=>upload.has(x.id))){d.updatedAt=ts(d.updatedAt)||Date.parse(d.created)||Date.now();d.name=canonicalVocabDeckName(d.name);await cloudStore.putDeck(d,metas.find(m=>m.id===d.id));d.cloud=true;d.syncedAt=ts(d.updatedAt)}
  for(const d of all)d.name=canonicalVocabDeckName(d.name);
  const fresh=new Map(readDecks().map(d=>[d.id,d])),final=all.map(d=>{const f=fresh.get(d.id);return f&&ts(f.updatedAt)>(startUpdated.get(d.id)||0)?{...f,cloud:d.cloud,syncedAt:d.syncedAt}:d});
  for(const[id,f]of fresh)if(!startUpdated.has(id)&&!final.some(x=>x.id===id))final.push(f);
@@ -401,13 +414,13 @@ async function doSyncDecks(seedDecks){
 }
 let progressSyncTimer=0;
 function queueProgressSync(){
- if(!sb||!cloudUser||!B)return;
- const bookId=B.cloudProgressId,progress={...B.progress},updated=progress.u||Date.now(),userId=cloudUser.id;
+ if(!fb||!cloudUser||!B)return;
+ const bookId=B.cloudProgressId,progress={...B.progress},updated=progress.u||Date.now(),user=cloudUser;
  clearTimeout(progressSyncTimer);
  progressSyncTimer=setTimeout(async()=>{try{
   if(!bookId)throw new Error('Falta el identificador privado del libro.');
-  const result=await sb.from('kotoba_reading_progress').upsert({user_id:userId,book_id:bookId,progress,updated_at:new Date(updated).toISOString()},{onConflict:'user_id,book_id'});
-  if(result.error)throw result.error
+  if(!cloudUser||cloudUser.id!==user.id)return;
+  await cloudStore.putProgress(progressDocId(bookId),progress,updated)
  }catch(e){console.warn('No se pudo sincronizar el progreso',e);const now=Date.now();if(now-(queueProgressSync.lastToast||0)>30000){queueProgressSync.lastToast=now;toast('No se pudo sincronizar el progreso: '+e.message)}}},1000)
 }
 function showWorkspace(){
@@ -433,7 +446,7 @@ function showEntry(){
  renderDeckMenu()
 }
 async function activateAccount(user){
- if(!user||!sb)return;
+ if(!user||!fb)return;
  if(cloudUser?.id===user.id&&window._kotobaSyncing)return;
  const migrateKey='kotoba:guestImported:'+user.id,importGuest=!ls.get(migrateKey),guestBooks=importGuest?(await idb('get','books')||[]):[],guestDecks=importGuest?readDecks():[];
  cloudUser=user;showWorkspace();window._kotobaSyncing=true;toast('Sincronizando progreso y decks…');
@@ -447,7 +460,7 @@ async function activateAccount(user){
   toast('Cuenta sincronizada')
  }catch(e){console.warn('Fallo de sincronización cloud',e);toast('Cuenta abierta; la sincronización falló: '+e.message)}
  finally{window._kotobaSyncing=false}
-}async function initCloudSession(){if(!sb||location.protocol==='file:')return;try{const r=await sb.auth.getSession();if(r.error)throw r.error;if(r.data.session?.user)await activateAccount(r.data.session.user)}catch(e){console.warn('No se pudo restaurar la sesión Supabase',e)}}
+}async function initCloudSession(){if(!fb||location.protocol==='file:')return;try{const user=await new Promise(res=>{const off=fb.auth.onAuthStateChanged(u=>{off();res(u)})});if(user&&user.emailVerified)await activateAccount(toCloudUser(user))}catch(e){console.warn('No se pudo restaurar la sesión',e)}}
 const P={n:'noun','adj-i':'i-adjective','adj-na':'na-adjective','adj-no':'no-adjective',adv:'adverb',prt:'particle',exp:'expression',conj:'conjunction',int:'interjection',pn:'pronoun',suf:'suffix',pref:'prefix',ctr:'counter',aux:'auxiliary',v1:'ichidan verb',vt:'transitive',vi:'intransitive',vs:'suru verb',vk:'kuru verb'},pn=p=>P[p]||(p.startsWith('v5')?'godan verb':p);
 /* ---------- tap a word ---------- */
 const caret=(x,y)=>{if(document.caretPositionFromPoint){const p=document.caretPositionFromPoint(x,y);return p&&[p.offsetNode,p.offset]}const r=document.caretRangeFromPoint(x,y);return r&&[r.startContainer,r.startOffset]};
@@ -557,7 +570,7 @@ function closeSheet(){closeVocabMenu();translationRequestNumber++;sheet.classLis
 /* ---------- files ---------- */
 function pick(d){mode=d?'dict':'';$('f').click()}
 const route=f=>{if(!f)return;if(/\.epub$/i.test(f.name))openBook(f);else if(/\.(zip|json|gz|tgz)$/i.test(f.name))loadDict(f);else toast('Formato no admitido. Usa un EPUB o un diccionario JMdict.')};
- $('sentenceTranslateBtn').onclick=()=>pageTranslationPanel();$('guestStart').onclick=()=>{ls.set('kotoba:mode','guest');showWorkspace()};$('loginStart').onclick=()=>showAuthFlow('login');$('registerStart').onclick=()=>showAuthFlow('register');$('changeMode').onclick=()=>{closeSheet();showEntry()};$('signOut').onclick=async()=>{if(sb){const r=await sb.auth.signOut();if(r.error){toast('No se pudo cerrar sesión: '+r.error.message);return}}showEntry();toast('Sesión cerrada')};
+ $('sentenceTranslateBtn').onclick=()=>pageTranslationPanel();$('guestStart').onclick=()=>{ls.set('kotoba:mode','guest');showWorkspace()};$('loginStart').onclick=()=>showAuthFlow('login');$('registerStart').onclick=()=>showAuthFlow('register');$('changeMode').onclick=()=>{closeSheet();showEntry()};$('signOut').onclick=async()=>{if(fb){try{await fb.auth.signOut()}catch(e){toast('No se pudo cerrar sesión: '+e.message);return}}showEntry();toast('Sesión cerrada')};
 $('deckBackdrop').onclick=closeSheet;
  $('homeBtn').onclick=()=>{closeSheet();closeVocabMenu();clearParseMarks();$('set').classList.remove('open');B=null;activeSentence='';activeImageUrls.forEach(u=>URL.revokeObjectURL(u));activeImageUrls=[];['stage','pl','pr','tb','bb'].forEach(i=>$(i).hidden=1);$('empty').hidden=0;if(window._coverUrl){URL.revokeObjectURL(window._coverUrl);window._coverUrl=null}$('coverMini').hidden=true;renderLibrary()};renderLibrary();renderDeckMenu();initCloudSession();
 $('f').onchange=e=>{const f=e.target.files[0];e.target.value='';mode=='dict'?loadDict(f):route(f);mode=''};
