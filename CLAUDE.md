@@ -52,16 +52,20 @@ All cloud access goes through the `cloudStore` adapter in `index.html`. Deck syn
 
 - Script syntax checked with Node. Deck sync and `cloudStore` pass 11 tests against an in-memory fake Firestore
   (scratch harness, not in the repo). EPUB sanitiser checked with jsdom.
-- **Not yet verified in a browser or against a real Firebase project:** login/verification/reset flow, Firestore
-  rules, reading flow after the progress-sync change, parse mode, the keyboard fix, image URL cleanup.
+- **Verified manually (localhost, real Firebase project yomika-6decc):** email/password sign-up with email
+  confirmation, sign-in, Firestore rules published, reading progress synced, saved words/decks synced and visible in a
+  second browser. Firebase Auth (Email/Password) and Firestore (production mode, default database) are set up.
+- **Still unverified:** password reset, guest-to-account import, sign-out/in edge cases, parse mode, the keyboard fix,
+  image URL cleanup, large libraries.
+- Dictionary: load `jmdict-eng-*.json.zip` (or `jmdict-all`) from jmdict-simplified. A non-English file such as
+  `jmdict-spa` gives "no English entries found" because the app only keeps English glosses.
+- Local testing: `python -m http.server 8000 --bind 127.0.0.1`, open `http://localhost:8000` (not 127.0.0.1).
 
 ## Still to do
 
-1. **Create the Firebase project** and fill `FIREBASE_CONFIG` at the top of the script in `index.html`
-   (filled in for project yomika-6decc). Follow
-   `yomika-firebase-setup.md`, including publishing `firestore.rules` and adding the hosted domain to Authorized
-   domains.
-2. **Test in a real browser**: guest mode, login on two devices, deck sync, progress sync, large EPUB library.
+1. ~~Create the Firebase project~~ Done (config is in `index.html`). Still add the hosted domain to Firebase Authorized
+   domains after deploying.
+2. **Finish browser testing**: password reset, guest import, parse mode, large EPUB library.
 3. ~~Merge the two HTML files~~ Done: only `index.html` remains and the launcher serves it.
 4. **Rewrite `README.md`** as a developer/deploy guide and delete or fix `LEEME-Yomika.txt`. Add `.gitattributes`
    for line endings (git warns about LF/CRLF) and a licence if wanted.
