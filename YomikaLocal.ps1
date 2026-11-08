@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 $script:Port = 1455
 $script:BaseUrl = "http://127.0.0.1:$($script:Port)"
 $script:OutputRoot = $PSScriptRoot
-$script:HtmlPath = Join-Path $PSScriptRoot 'index.html'
+$script:HtmlPath = Join-Path (Join-Path $PSScriptRoot 'public') 'index.html'
 $script:DataRoot = Join-Path $env:LOCALAPPDATA 'Yomika'
 $script:CredentialPath = Join-Path $script:DataRoot 'chatgpt-session.dpapi'
 $script:HostIdPath = Join-Path $script:DataRoot 'host-id.txt'
@@ -388,7 +388,7 @@ function Handle-Context($Context) {
     try {
         if ($request.Url.Host -ne '127.0.0.1' -or $request.Url.Port -ne $script:Port) { Send-Json $Context 403 @{ error = 'Origen local no válido.' }; return }
         if ($request.HttpMethod -eq 'GET' -and ($path -eq '/' -or $path -eq '/index.html')) {
-            if (-not (Test-Path -LiteralPath $script:HtmlPath)) { Send-Response $Context 404 'text/plain; charset=utf-8' 'No se encontró index.html junto al lanzador.'; return }
+            if (-not (Test-Path -LiteralPath $script:HtmlPath)) { Send-Response $Context 404 'text/plain; charset=utf-8' 'No se encontró public\index.html junto al lanzador.'; return }
             $html = [System.IO.File]::ReadAllText($script:HtmlPath)
             Send-Response $Context 200 'text/html; charset=utf-8' $html
             return
@@ -445,7 +445,7 @@ function Handle-Context($Context) {
 }
 
 if (-not (Test-Path -LiteralPath $script:HtmlPath)) {
-    Write-Host 'No se encontró index.html.' -ForegroundColor Red
+    Write-Host 'No se encontró public\index.html.' -ForegroundColor Red
     exit 1
 }
 if (-not (Test-Path -LiteralPath $script:DataRoot)) { New-Item -ItemType Directory -Path $script:DataRoot -Force | Out-Null }
