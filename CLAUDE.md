@@ -58,7 +58,7 @@ All cloud access goes through the `cloudStore` adapter in `index.html`. Deck syn
 ## Still to do
 
 1. **Create the Firebase project** and fill `FIREBASE_CONFIG` at the top of the script in `index.html`
-   (apiKey, authDomain, projectId, appId are empty). Until then the page is guest-only. Follow
+   (filled in for project yomika-6decc). Follow
    `yomika-firebase-setup.md`, including publishing `firestore.rules` and adding the hosted domain to Authorized
    domains.
 2. **Test in a real browser**: guest mode, login on two devices, deck sync, progress sync, large EPUB library.

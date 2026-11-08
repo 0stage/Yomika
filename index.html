@@ -138,7 +138,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:0;border-radiu
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" integrity="sha384-qn4Jh88HhJA8dplNQyGjOh9OGI4izVhrfj/qIFgaKcdgOE06pXqIKGlsCILZcLAC" crossorigin="anonymous"></script>
 <script>
 const $=i=>document.getElementById(i),G=40,view=$('view'),c=$('c'),sl=$('sl'),sheet=$('sheet');
-const FIREBASE_CONFIG={apiKey:'',authDomain:'',projectId:'',appId:''};let fb=null,cloudUser=null;
+const FIREBASE_CONFIG={apiKey:'AIzaSyCc6ep8MXLEUjsAlTMfPjG8xQfNviWzz_U',authDomain:'yomika-6decc.firebaseapp.com',projectId:'yomika-6decc',appId:'1:337456047951:web:0cb0c83b4634acc543873a'};let fb=null,cloudUser=null;
 if(FIREBASE_CONFIG.apiKey&&FIREBASE_CONFIG.projectId&&window.firebase?.initializeApp){try{firebase.apps.length||firebase.initializeApp(FIREBASE_CONFIG);fb={auth:firebase.auth(),db:firebase.firestore()}}catch(e){console.warn('No se pudo iniciar Firebase',e)}}
 const toCloudUser=u=>u?{id:u.uid,email:u.email||''}:null;
 if(fb)fb.auth.onAuthStateChanged(u=>{if(!u&&cloudUser){showEntry();toast('Sesión cerrada')}});
