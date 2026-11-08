@@ -347,7 +347,7 @@ function showAuthFlow(kind){if(!fb||location.protocol==='file:'){showAuthNotice(
    if(registering){const cred=await fb.auth.createUserWithEmailAndPassword(email,password);try{await cred.user.sendEmailVerification({url:back})}catch{}await fb.auth.signOut();sheet.innerHTML='<div class="surf">Revisa tu correo</div><p>Te hemos enviado un enlace para confirmar tu cuenta. Ábrelo y después inicia sesión.</p><button class="b" id="authNoticeClose">Entendido</button>';sheet.classList.add('open');$('authNoticeClose').onclick=closeSheet;return}
    const cred=await fb.auth.signInWithEmailAndPassword(email,password);await cred.user.reload();
    if(!cred.user.emailVerified){try{await cred.user.sendEmailVerification({url:back})}catch{}await fb.auth.signOut();throw new Error('Confirma tu correo antes de entrar. Te hemos enviado el enlace de nuevo.')}
-   await activateAccount(toCloudUser(cred.user))
+   closeSheet();await activateAccount(toCloudUser(cred.user))
   }catch(error){err.textContent=authErrorText(error);err.hidden=false;button.disabled=false;button.textContent=registering?'Crear cuenta':'Entrar'}}}
 async function privateProgressId(book){
  if(book.cloudProgressId)return book.cloudProgressId;
