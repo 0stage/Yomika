@@ -8,7 +8,8 @@ progress and decks sync to the cloud. Originally written by the user's partner, 
 
 | File | Purpose |
 |---|---|
-| `index.html` | The whole app (HTML, CSS, one large minified-style `<script>`). Also the file the local launcher serves. |
+| `public/index.html` | The whole app (HTML, CSS, one large minified-style `<script>`). Everything under `public/` is what gets published; the local launcher serves it too. |
+| `wrangler.jsonc` | Cloudflare Workers static-assets config: publishes only `./public` (keeps docs, scripts and rules out of the site). |
 | `YomikaLocal.ps1`, `Iniciar-Yomika.bat` | Windows-only local launcher: serves the HTML on 127.0.0.1:1455 and proxies the ChatGPT-plan login/translation. Optional now. |
 | `firestore.rules` | Per-user Firestore rules; requires a verified email. |
 | `yomika-firebase-setup.md` | Firebase console setup steps, data layout. |
@@ -19,8 +20,8 @@ progress and decks sync to the cloud. Originally written by the user's partner, 
 - **Hosting:** all on Cloudflare (Pages for the static page, a Worker later for the translation proxy and any cron).
   Target cost about $0/year, plus an optional custom domain.
 - **Accounts and data:** Firebase Auth (email/password, verification required) + Firestore on the free Spark plan.
-  Supabase was removed on this branch.
-- **Translation:** AI translation is switched off (`AI_TRANSLATION_ENABLED=false` in `index.html`). It will be plugged
+  Supabase was removed.
+- **Translation:** AI translation is switched off (`AI_TRANSLATION_ENABLED=false` in `public/index.html`). It will be plugged
   back in as a later step through a provider-agnostic Cloudflare Worker (API key held server-side, checks the
   Firebase ID token, per-user limits, monthly spend cap).
 - **ChatGPT-plan login cannot be hosted.** OpenAI documents it for local/open-source use; hosted use needs their
@@ -28,14 +29,11 @@ progress and decks sync to the cloud. Originally written by the user's partner, 
 
 ## Branch state
 
-Branch `fix/review-findings` (based on `main`, nothing pushed):
-
-1. `50753dc` original code plus translation disabled.
-2. `62fb12b` review fixes: `asISO` bug, keyboard shortcuts ignored inside inputs, no more rewriting the whole
-   library on each page turn, visible warning when localStorage writes fail, EPUB sanitising (on* handlers,
-   javascript: URLs, iframe/object/embed/form), quote-safe `esc()`, SRI hashes, object-URL leak, retry for
-   Kuromoji, unsupported dropped files rejected, English UI strings translated.
-3. `260b6cf` Supabase replaced by Firebase Auth + Firestore.
+- `main` has everything up to PR #1 (review fixes, Firebase migration, single HTML file, Firebase config).
+- Branch `deploy/cloudflare` (local, not pushed yet): moves `index.html` into `public/`, adds `wrangler.jsonc`, points the
+  launcher at `public\index.html`. Needed because Cloudflare's current flow runs `npx wrangler deploy`.
+  `wrangler deploy --dry-run` could not be run locally (Wrangler needs Node 22, machine has 20.5), so the config is
+  unvalidated until the first Cloudflare build.
 
 ## Firestore data model
 
@@ -45,7 +43,7 @@ users/{uid}/decks/{deckId}              { name, created, updatedAt, chunkCount, 
 users/{uid}/decks/{deckId}/chunks/{n}   { words:[...] }   (400 words per doc, 1 MiB doc limit)
 ```
 
-All cloud access goes through the `cloudStore` adapter in `index.html`. Deck sync (`doSyncDecks`) tracks `cloud` and
+All cloud access goes through the `cloudStore` adapter in `public/index.html`. Deck sync (`doSyncDecks`) tracks `cloud` and
 `syncedAt` on local decks, fetches metadata first, merges conflicts by word union, and honours remote deletions.
 
 ## Status of testing
@@ -59,17 +57,18 @@ All cloud access goes through the `cloudStore` adapter in `index.html`. Deck syn
   image URL cleanup, large libraries.
 - Dictionary: load `jmdict-eng-*.json.zip` (or `jmdict-all`) from jmdict-simplified. A non-English file such as
   `jmdict-spa` gives "no English entries found" because the app only keeps English glosses.
-- Local testing: `python -m http.server 8000 --bind 127.0.0.1`, open `http://localhost:8000` (not 127.0.0.1).
+- Local testing: `python -m http.server 8000 --bind 127.0.0.1 --directory public`, open `http://localhost:8000` (not
+  127.0.0.1). On Windows two servers can share a port, so stop old ones before restarting.
 
 ## Still to do
 
-1. ~~Create the Firebase project~~ Done (config is in `index.html`). Still add the hosted domain to Firebase Authorized
+1. ~~Create the Firebase project~~ Done (config is in `public/index.html`). Still add the hosted domain to Firebase Authorized
    domains after deploying.
 2. **Finish browser testing**: password reset, guest import, parse mode, large EPUB library.
-3. ~~Merge the two HTML files~~ Done: only `index.html` remains and the launcher serves it.
+3. ~~Merge the two HTML files~~ Done: a single `public/index.html` remains and the launcher serves it.
 4. **Rewrite `README.md`** as a developer/deploy guide and delete or fix `LEEME-Yomika.txt`. Add `.gitattributes`
    for line endings (git warns about LF/CRLF) and a licence if wanted.
-5. **Deploy to Cloudflare Pages** (static page, HTTPS, custom domain optional).
+5. **Deploy to Cloudflare** (Workers static assets via `wrangler.jsonc`, HTTPS, custom domain optional). Cloudflare settings: build command empty, deploy command `npx wrangler deploy`, production branch `main`. Then add the live domain to Firebase Authorized domains.
 6. **Translation step**: build the Cloudflare Worker. Verify the Firebase ID token against Google's public keys,
    adapter per provider (OpenAI, Anthropic, Gemini, Workers AI, ...), per-user daily limits, prompt-length cap, set
    a spend limit at the provider. In the page, replace `callOpenAI` and the disabled account/consent markup with a
@@ -92,6 +91,6 @@ All cloud access goes through the `cloudStore` adapter in `index.html`. Deck syn
 ## Working notes
 
 - The script is dense; edit it with exact-string replacements and re-check syntax:
-  `node -e "const s=require('fs').readFileSync('index.html','utf8');for(const x of s.matchAll(/<script>([\s\S]*?)<\/script>/g))new Function(x[1])"`
+  `node -e "const s=require('fs').readFileSync('public/index.html','utf8');for(const x of s.matchAll(/<script>([\s\S]*?)<\/script>/g))new Function(x[1])"`
 - Never commit API keys. Only the Firebase web config belongs in the page.
-- Commit messages end with the Claude co-author trailer.
+- Do not add a Claude co-author trailer to commit messages (the user asked for this).
